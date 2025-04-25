@@ -4,13 +4,19 @@ from playwright.sync_api import Page
 from ui_tests.locators.upload_page import UploadPageLocators as Locators
 
 def test_file_upload(page: Page, upload_page_url):
+    # Take initial screenshot
     page.goto(upload_page_url)
+    page.screenshot(path="screenshots/before_upload.png", full_page=True)
+    
     file_path = os.path.abspath("sample.txt")
     with open(file_path, "w") as f:
         f.write("Test file upload")
 
     page.set_input_files(Locators.FILE_INPUT, file_path)
     page.click(Locators.SUBMIT_BUTTON)
+
+    # Take screenshot after upload
+    page.screenshot(path="screenshots/after_upload.png", full_page=True)
 
     assert page.text_content(Locators.SUCCESS_HEADER) == "File Uploaded!"
     assert "sample.txt" in page.text_content(Locators.UPLOADED_FILES_TEXT)

@@ -388,3 +388,48 @@ div.media {
 .filter__label {
   margin-right: 10px;
 }
+
+.screenshot {
+    max-width: 100%;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    margin: 10px 0;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.screenshot-container {
+    background-color: #f8f9fa;
+    padding: 15px;
+    border-radius: 4px;
+    margin: 15px 0;
+}
+
+.screenshot-title {
+    font-weight: bold;
+    color: #2c3e50;
+    margin-bottom: 10px;
+}
+
+.video-container {
+    width: 100%;
+    max-width: 800px;
+    margin: 15px 0;
+}
+
+.video-player {
+    width: 100%;
+    border-radius: 4px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.media-section {
+    margin: 20px 0;
+    padding: 15px;
+    background-color: #f8f9fa;
+    border-radius: 4px;
+}
+
+.media-section h3 {
+    color: #2c3e50;
+    margin-bottom: 10px;
+}
