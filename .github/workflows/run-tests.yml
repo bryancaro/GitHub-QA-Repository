@@ -1,4 +1,4 @@
-name: Run Tests
+name: Run Tests and Upload to Azure DevOps
 
 on:
   push:
@@ -16,6 +16,11 @@ on:
         - all
         - api
         - ui
+
+env:
+  AZURE_DEVOPS_ORG: fractalteamio
+  AZURE_DEVOPS_PROJECT: Test
+  AZURE_DEVOPS_PAT: 4uoqty9TiY5sOJ6JrFpCZtHq6fLzeVBMgM9uFnPfGZbiMj2SdrAZJQQJ99BDACAAAAAAAAAAAAASAZDO1qwa
 
 jobs:
   test:
@@ -36,6 +41,7 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
+        pip install pytest-azurepipelines
         playwright install
         playwright install-deps
 
@@ -43,18 +49,138 @@ jobs:
       run: |
         if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
           if [ "${{ github.event.inputs.test_type }}" == "api" ]; then
-            PYTHONPATH=$PYTHONPATH:. pytest api_tests/ --html=report.html
+            PYTHONPATH=$PYTHONPATH:. pytest api_tests/ --html=report.html --self-contained-html --css=assets/style.css --capture=sys --show-capture=all --verbose --tb=long --screenshot=only-on-failure --junitxml=test-results.xml
           elif [ "${{ github.event.inputs.test_type }}" == "ui" ]; then
-            PYTHONPATH=$PYTHONPATH:. pytest ui_tests/ --html=report.html
+            PYTHONPATH=$PYTHONPATH:. pytest ui_tests/ --html=report.html --self-contained-html --css=assets/style.css --capture=sys --show-capture=all --verbose --tb=long --screenshot=only-on-failure --junitxml=test-results.xml
           else
-            PYTHONPATH=$PYTHONPATH:. pytest api_tests/ ui_tests/ --html=report.html
+            PYTHONPATH=$PYTHONPATH:. pytest api_tests/ ui_tests/ --html=report.html --self-contained-html --css=assets/style.css --capture=sys --show-capture=all --verbose --tb=long --screenshot=only-on-failure --junitxml=test-results.xml
           fi
         else
-          PYTHONPATH=$PYTHONPATH:. pytest api_tests/ ui_tests/ --html=report.html
+          PYTHONPATH=$PYTHONPATH:. pytest api_tests/ ui_tests/ --html=report.html --self-contained-html --css=assets/style.css --capture=sys --show-capture=all --verbose --tb=long --screenshot=only-on-failure --junitxml=test-results.xml
         fi
 
     - name: Upload test report
       uses: actions/upload-artifact@v4
       with:
         name: test-report
-        path: report.html 
+        path: report.html
+
+    - name: Upload test results to Azure DevOps
+      run: |
+        # Convert JUnit XML to TRX format
+        python -c "
+        import xml.etree.ElementTree as ET
+        import json
+        import requests
+        import os
+        from datetime import datetime
+        import base64
+        import sys
+
+        def log(message):
+            print(f'[INFO] {message}', file=sys.stderr)
+
+        try:
+            # Parse JUnit XML
+            log('Parsing JUnit XML file...')
+            tree = ET.parse('test-results.xml')
+            root = tree.getroot()
+
+            # Create TRX structure
+            log('Creating TRX structure...')
+            trx = {
+                'TestRun': {
+                    'id': str(datetime.now().timestamp()),
+                    'name': f'GitHub Actions Test Run - {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}',
+                    'times': {
+                        'creation': datetime.now().isoformat(),
+                        'start': datetime.now().isoformat(),
+                        'finish': datetime.now().isoformat()
+                    },
+                    'Results': [],
+                    'TestDefinitions': [],
+                    'TestEntries': [],
+                    'TestSettings': {
+                        'id': '1',
+                        'name': 'Default Test Settings'
+                    }
+                }
+            }
+
+            # Convert test cases
+            log('Converting test cases...')
+            for testcase in root.findall('.//testcase'):
+                test_id = testcase.get('name')
+                duration = float(testcase.get('time', 0))
+                outcome = 'Passed' if len(testcase.findall('failure')) == 0 else 'Failed'
+                
+                # Get error message if test failed
+                error_message = ''
+                if outcome == 'Failed':
+                    failure = testcase.find('failure')
+                    if failure is not None:
+                        error_message = failure.get('message', '') + '\\n' + failure.text
+
+                trx['TestRun']['TestDefinitions'].append({
+                    'id': test_id,
+                    'name': testcase.get('name'),
+                    'TestMethod': {
+                        'className': testcase.get('classname'),
+                        'name': testcase.get('name')
+                    }
+                })
+                
+                trx['TestRun']['TestEntries'].append({
+                    'testId': test_id,
+                    'executionId': test_id,
+                    'testListId': '8c84fa94-04c1-424b-9868-57a2d4851a1d'
+                })
+                
+                trx['TestRun']['Results'].append({
+                    'executionId': test_id,
+                    'testId': test_id,
+                    'testName': testcase.get('name'),
+                    'outcome': outcome,
+                    'duration': f'PT{duration}S',
+                    'computerName': os.uname().nodename,
+                    'errorMessage': error_message,
+                    'stackTrace': error_message
+                })
+
+            # Save TRX file
+            log('Saving TRX file...')
+            with open('test-results.trx', 'w') as f:
+                f.write(json.dumps(trx, indent=2))
+
+            # Upload to Azure DevOps
+            log('Preparing to upload to Azure DevOps...')
+            pat = os.environ['AZURE_DEVOPS_PAT']
+            org = os.environ['AZURE_DEVOPS_ORG']
+            project = os.environ['AZURE_DEVOPS_PROJECT']
+            
+            # Encode PAT for Basic Auth
+            auth = base64.b64encode(f':{pat}'.encode()).decode()
+            
+            headers = {
+                'Authorization': f'Basic {auth}',
+                'Content-Type': 'application/json'
+            }
+            
+            url = f'https://dev.azure.com/{org}/{project}/_apis/test/runs?api-version=6.0'
+            
+            log(f'Uploading to {url}...')
+            with open('test-results.trx', 'r') as f:
+                response = requests.post(url, headers=headers, data=f.read())
+                
+            if response.status_code == 200:
+                log('Successfully uploaded test results to Azure DevOps')
+                print(f'Test Run ID: {response.json().get("id")}')
+            else:
+                log(f'Failed to upload test results. Status code: {response.status_code}')
+                log(f'Response: {response.text}')
+                sys.exit(1)
+
+        except Exception as e:
+            log(f'Error: {str(e)}')
+            sys.exit(1)
+        " 
