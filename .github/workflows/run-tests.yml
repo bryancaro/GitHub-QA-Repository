@@ -67,16 +67,17 @@ jobs:
         name: test-report
         path: report.html
 
-    - name: Publish Test Results to Azure DevOps
-      uses: rasunkar/publishtestresults-action@v1.0.0-beta
-      with:
-        testResultsFormat: 'JUnit'
-        testResultsFiles: '**/test-results.xml'
-        searchFolder: ${{ github.workspace }}
-        mergeTestResults: true
-        testRunTitle: "GitHub Actions Test Run"
-        failTaskOnFailedTests: false
-        adoOrganizationName: ${{ env.AZURE_DEVOPS_ORG }}
-        adoProjectName: ${{ env.AZURE_DEVOPS_PROJECT }}
-      env:
-        ADO_ACCESS_TOKEN: ${{ env.AZURE_DEVOPS_PAT }} 
+    - name: Install Azure DevOps CLI
+      shell: pwsh
+      run: |
+        az extension add --name azure-devops
+
+    - name: Login to Azure DevOps
+      shell: pwsh
+      run: |
+        az devops login --organization https://dev.azure.com/${{ env.AZURE_DEVOPS_ORG }} --token ${{ env.AZURE_DEVOPS_PAT }}
+
+    - name: Publish Test Results
+      shell: pwsh
+      run: |
+        az pipelines runs test-results publish --org https://dev.azure.com/${{ env.AZURE_DEVOPS_ORG }} --project ${{ env.AZURE_DEVOPS_PROJECT }} --run-id ${{ github.run_id }} --result-files "**/test-results.xml" --result-type JUnit 
