@@ -24,7 +24,7 @@ env:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest  # Note: This action only works on Windows
     strategy:
       matrix:
         python-version: [3.9]
@@ -65,141 +65,16 @@ jobs:
         name: test-report
         path: report.html
 
-    - name: Upload test results to Azure DevOps
-      run: |
-        # Convert JUnit XML to TRX format
-        python -c "
-        import xml.etree.ElementTree as ET
-        import json
-        import requests
-        import os
-        from datetime import datetime
-        import base64
-        import sys
-        import uuid
-
-        def log(message):
-            print(f'[INFO] {message}', file=sys.stderr)
-
-        try:
-            # Parse JUnit XML
-            log('Parsing JUnit XML file...')
-            tree = ET.parse('test-results.xml')
-            root = tree.getroot()
-
-            # Create TRX structure
-            log('Creating TRX structure...')
-            current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            run_id = str(uuid.uuid4())
-            
-            trx = {
-                'TestRun': {
-                    'id': run_id,
-                    'name': f'GitHub Actions Test Run - {current_time}',
-                    'times': {
-                        'creation': datetime.now().isoformat(),
-                        'start': datetime.now().isoformat(),
-                        'finish': datetime.now().isoformat()
-                    },
-                    'Results': [],
-                    'TestDefinitions': [],
-                    'TestEntries': [],
-                    'TestSettings': {
-                        'id': '1',
-                        'name': 'Default Test Settings'
-                    },
-                    'TestConfiguration': {
-                        'id': '1',
-                        'name': 'Default Configuration'
-                    }
-                }
-            }
-
-            # Convert test cases
-            log('Converting test cases...')
-            for testcase in root.findall('.//testcase'):
-                test_id = str(uuid.uuid4())
-                duration = float(testcase.get('time', 0))
-                outcome = 'Passed' if len(testcase.findall('failure')) == 0 else 'Failed'
-                
-                # Get error message if test failed
-                error_message = ''
-                if outcome == 'Failed':
-                    failure = testcase.find('failure')
-                    if failure is not None:
-                        error_message = failure.get('message', '') + '\\n' + failure.text
-
-                # Create test definition
-                test_definition = {
-                    'id': test_id,
-                    'name': testcase.get('name'),
-                    'storage': 'testcase',
-                    'execution': {
-                        'id': test_id
-                    },
-                    'testMethod': {
-                        'className': testcase.get('classname'),
-                        'name': testcase.get('name')
-                    }
-                }
-                trx['TestRun']['TestDefinitions'].append(test_definition)
-                
-                # Create test entry
-                test_entry = {
-                    'testId': test_id,
-                    'executionId': test_id,
-                    'testListId': '8c84fa94-04c1-424b-9868-57a2d4851a1d'
-                }
-                trx['TestRun']['TestEntries'].append(test_entry)
-                
-                # Create test result
-                test_result = {
-                    'executionId': test_id,
-                    'testId': test_id,
-                    'testName': testcase.get('name'),
-                    'outcome': outcome,
-                    'duration': f'PT{duration}S',
-                    'computerName': os.uname().nodename,
-                    'errorMessage': error_message,
-                    'stackTrace': error_message,
-                    'relativeResultsDirectory': test_id
-                }
-                trx['TestRun']['Results'].append(test_result)
-
-            # Save TRX file
-            log('Saving TRX file...')
-            with open('test-results.trx', 'w') as f:
-                f.write(json.dumps(trx, indent=2))
-
-            # Upload to Azure DevOps
-            log('Preparing to upload to Azure DevOps...')
-            pat = os.environ['AZURE_DEVOPS_PAT']
-            org = os.environ['AZURE_DEVOPS_ORG']
-            project = os.environ['AZURE_DEVOPS_PROJECT']
-            
-            # Encode PAT for Basic Auth
-            auth = base64.b64encode(f':{pat}'.encode()).decode()
-            
-            headers = {
-                'Authorization': f'Basic {auth}',
-                'Content-Type': 'application/json'
-            }
-            
-            url = f'https://dev.azure.com/{org}/{project}/_apis/test/runs?api-version=6.0'
-            
-            log(f'Uploading to {url}...')
-            with open('test-results.trx', 'r') as f:
-                response = requests.post(url, headers=headers, data=f.read())
-                
-            if response.status_code == 200:
-                log('Successfully uploaded test results to Azure DevOps')
-                print(f'Test Run ID: {response.json().get("id")}')
-            else:
-                log(f'Failed to upload test results. Status code: {response.status_code}')
-                log(f'Response: {response.text}')
-                sys.exit(1)
-
-        except Exception as e:
-            log(f'Error: {str(e)}')
-            sys.exit(1)
-        " 
+    - name: Publish Test Results to Azure DevOps
+      uses: rasunkar/publishtestresults-action@v1.0.0-beta
+      with:
+        testResultsFormat: 'JUnit'
+        testResultsFiles: '**/test-results.xml'
+        searchFolder: ${{ github.workspace }}
+        mergeTestResults: true
+        testRunTitle: "GitHub Actions Test Run"
+        failTaskOnFailedTests: false
+        adoOrganizationName: ${{ env.AZURE_DEVOPS_ORG }}
+        adoProjectName: ${{ env.AZURE_DEVOPS_PROJECT }}
+      env:
+        ADO_ACCESS_TOKEN: ${{ env.AZURE_DEVOPS_PAT }} 
