@@ -24,7 +24,7 @@ env:
 
 jobs:
   test:
-    runs-on: windows-latest  # Note: This action only works on Windows
+    runs-on: windows-latest
     strategy:
       matrix:
         python-version: [3.9]
@@ -46,18 +46,20 @@ jobs:
         playwright install-deps
 
     - name: Run tests
+      shell: pwsh
       run: |
-        if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-          if [ "${{ github.event.inputs.test_type }}" == "api" ]; then
-            PYTHONPATH=$PYTHONPATH:. pytest api_tests/ --html=report.html --self-contained-html --css=assets/style.css --capture=sys --show-capture=all --verbose --tb=long --screenshot=only-on-failure --junitxml=test-results.xml
-          elif [ "${{ github.event.inputs.test_type }}" == "ui" ]; then
-            PYTHONPATH=$PYTHONPATH:. pytest ui_tests/ --html=report.html --self-contained-html --css=assets/style.css --capture=sys --show-capture=all --verbose --tb=long --screenshot=only-on-failure --junitxml=test-results.xml
-          else
-            PYTHONPATH=$PYTHONPATH:. pytest api_tests/ ui_tests/ --html=report.html --self-contained-html --css=assets/style.css --capture=sys --show-capture=all --verbose --tb=long --screenshot=only-on-failure --junitxml=test-results.xml
-          fi
-        else
-          PYTHONPATH=$PYTHONPATH:. pytest api_tests/ ui_tests/ --html=report.html --self-contained-html --css=assets/style.css --capture=sys --show-capture=all --verbose --tb=long --screenshot=only-on-failure --junitxml=test-results.xml
-        fi
+        $env:PYTHONPATH = "$env:PYTHONPATH;."
+        if ($env:GITHUB_EVENT_NAME -eq "workflow_dispatch") {
+          if ($env:GITHUB_EVENT_INPUTS_TEST_TYPE -eq "api") {
+            pytest api_tests/ --html=report.html --self-contained-html --css=assets/style.css --capture=sys --show-capture=all --verbose --tb=long --screenshot=only-on-failure --junitxml=test-results.xml
+          } elseif ($env:GITHUB_EVENT_INPUTS_TEST_TYPE -eq "ui") {
+            pytest ui_tests/ --html=report.html --self-contained-html --css=assets/style.css --capture=sys --show-capture=all --verbose --tb=long --screenshot=only-on-failure --junitxml=test-results.xml
+          } else {
+            pytest api_tests/ ui_tests/ --html=report.html --self-contained-html --css=assets/style.css --capture=sys --show-capture=all --verbose --tb=long --screenshot=only-on-failure --junitxml=test-results.xml
+          }
+        } else {
+          pytest api_tests/ ui_tests/ --html=report.html --self-contained-html --css=assets/style.css --capture=sys --show-capture=all --verbose --tb=long --screenshot=only-on-failure --junitxml=test-results.xml
+        }
 
     - name: Upload test report
       uses: actions/upload-artifact@v4
