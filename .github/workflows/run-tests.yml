@@ -67,17 +67,15 @@ jobs:
         name: test-report
         path: report.html
 
-    - name: Install Azure DevOps CLI
-      shell: pwsh
-      run: |
-        az extension add --name azure-devops
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-results
+        path: test-results.xml
 
-    - name: Login to Azure DevOps
-      shell: pwsh
-      run: |
-        echo ${{ env.AZURE_DEVOPS_PAT }} | az devops login --organization https://dev.azure.com/${{ env.AZURE_DEVOPS_ORG }}
-
-    - name: Publish Test Results
-      shell: pwsh
-      run: |
-        az pipelines runs test-results publish --org https://dev.azure.com/${{ env.AZURE_DEVOPS_ORG }} --project ${{ env.AZURE_DEVOPS_PROJECT }} --run-id ${{ github.run_id }} --result-files "**/test-results.xml" --result-type JUnit 
+    - name: Publish Test Results to Azure DevOps
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-results-azure
+        path: test-results.xml
+        retention-days: 1 
