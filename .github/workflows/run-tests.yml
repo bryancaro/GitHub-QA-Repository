@@ -76,6 +76,7 @@ jobs:
         from datetime import datetime
         import base64
         import sys
+        import uuid
 
         def log(message):
             print(f'[INFO] {message}', file=sys.stderr)
@@ -89,9 +90,11 @@ jobs:
             # Create TRX structure
             log('Creating TRX structure...')
             current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            run_id = str(uuid.uuid4())
+            
             trx = {
                 'TestRun': {
-                    'id': str(datetime.now().timestamp()),
+                    'id': run_id,
                     'name': f'GitHub Actions Test Run - {current_time}',
                     'times': {
                         'creation': datetime.now().isoformat(),
@@ -104,6 +107,10 @@ jobs:
                     'TestSettings': {
                         'id': '1',
                         'name': 'Default Test Settings'
+                    },
+                    'TestConfiguration': {
+                        'id': '1',
+                        'name': 'Default Configuration'
                     }
                 }
             }
@@ -111,7 +118,7 @@ jobs:
             # Convert test cases
             log('Converting test cases...')
             for testcase in root.findall('.//testcase'):
-                test_id = testcase.get('name')
+                test_id = str(uuid.uuid4())
                 duration = float(testcase.get('time', 0))
                 outcome = 'Passed' if len(testcase.findall('failure')) == 0 else 'Failed'
                 
@@ -122,22 +129,31 @@ jobs:
                     if failure is not None:
                         error_message = failure.get('message', '') + '\\n' + failure.text
 
-                trx['TestRun']['TestDefinitions'].append({
+                # Create test definition
+                test_definition = {
                     'id': test_id,
                     'name': testcase.get('name'),
-                    'TestMethod': {
+                    'storage': 'testcase',
+                    'execution': {
+                        'id': test_id
+                    },
+                    'testMethod': {
                         'className': testcase.get('classname'),
                         'name': testcase.get('name')
                     }
-                })
+                }
+                trx['TestRun']['TestDefinitions'].append(test_definition)
                 
-                trx['TestRun']['TestEntries'].append({
+                # Create test entry
+                test_entry = {
                     'testId': test_id,
                     'executionId': test_id,
                     'testListId': '8c84fa94-04c1-424b-9868-57a2d4851a1d'
-                })
+                }
+                trx['TestRun']['TestEntries'].append(test_entry)
                 
-                trx['TestRun']['Results'].append({
+                # Create test result
+                test_result = {
                     'executionId': test_id,
                     'testId': test_id,
                     'testName': testcase.get('name'),
@@ -145,8 +161,10 @@ jobs:
                     'duration': f'PT{duration}S',
                     'computerName': os.uname().nodename,
                     'errorMessage': error_message,
-                    'stackTrace': error_message
-                })
+                    'stackTrace': error_message,
+                    'relativeResultsDirectory': test_id
+                }
+                trx['TestRun']['Results'].append(test_result)
 
             # Save TRX file
             log('Saving TRX file...')
