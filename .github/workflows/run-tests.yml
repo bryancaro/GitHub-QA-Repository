@@ -75,7 +75,7 @@ jobs:
     - name: Login to Azure DevOps
       shell: pwsh
       run: |
-        az devops login --organization https://dev.azure.com/${{ env.AZURE_DEVOPS_ORG }} --token ${{ env.AZURE_DEVOPS_PAT }}
+        echo ${{ env.AZURE_DEVOPS_PAT }} | az devops login --organization https://dev.azure.com/${{ env.AZURE_DEVOPS_ORG }}
 
     - name: Publish Test Results
       shell: pwsh
